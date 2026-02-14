@@ -1,7 +1,8 @@
 {
-  "name": "my-app",
+  "name": "xtmc-trading",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
+  "description": "XTMC量化交易系统 - 自我进化型AI交易平台",
   "type": "module",
   "scripts": {
     "dev": "vite",

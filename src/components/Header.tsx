@@ -1,16 +1,19 @@
 /**
  * XTMC头部组件
+ * 包含Logo、AI状态指标、设置入口
  */
 
-import { Cpu, Brain, TrendingUp } from 'lucide-react';
+import { Cpu, Brain, TrendingUp, Settings } from 'lucide-react';
 import type { SystemStatus } from '../types';
 
 interface HeaderProps {
   systemStatus: SystemStatus;
   isConnected: boolean;
+  onOpenSettings?: () => void;
+  theme?: string;
 }
 
-export default function Header({ systemStatus, isConnected }: HeaderProps) {
+export default function Header({ systemStatus, isConnected, onOpenSettings }: HeaderProps) {
   const getStatusColor = () => {
     if (!isConnected) return 'bg-red-500';
     if (systemStatus.trading?.enabled) return 'bg-green-500';
@@ -34,7 +37,7 @@ export default function Header({ systemStatus, isConnected }: HeaderProps) {
             </div>
           </div>
 
-          {/* AI状态指标 */}
+          {/* AI状态指标 + 设置 */}
           <div className="hidden md:flex items-center gap-6">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-green-400" />
@@ -60,6 +63,14 @@ export default function Header({ systemStatus, isConnected }: HeaderProps) {
                 {isConnected ? 'AI运行中' : '离线'}
               </span>
             </div>
+            {/* 设置按钮 */}
+            <button
+              onClick={onOpenSettings}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
+              title="系统设置"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>

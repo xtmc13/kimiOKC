@@ -24,6 +24,10 @@ export interface SystemStatus {
     win_rate: number;
     total_profit: number;
   };
+  data_source?: {
+    active: string;
+    stats: Record<string, { failures: number; last_success: number; healthy: boolean }>;
+  };
 }
 
 // 交易配置

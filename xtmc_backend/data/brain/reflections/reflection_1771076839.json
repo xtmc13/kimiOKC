@@ -1,0 +1,32 @@
+{
+  "performance_assessment": "交易数据不足; 胜率偏低",
+  "issues": [
+    "交易数据不足",
+    "胜率偏低"
+  ],
+  "gaps": [
+    {
+      "type": "performance",
+      "description": "胜率偏低，需要更好的入场信号",
+      "priority": "high"
+    },
+    {
+      "type": "capability",
+      "description": "缺少volume类分析工具",
+      "priority": "medium"
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "add_trend_tools",
+      "description": "添加趋势确认指标",
+      "tools_needed": [
+        "adx_analyzer",
+        "trend_detector"
+      ],
+      "priority": "high"
+    }
+  ],
+  "summary": "胜率: 0.0% | 总交易: 0 | 高优先级缺口: 1个 | 建议改进: 1项",
+  "timestamp": 1771076839.0135036
+}
