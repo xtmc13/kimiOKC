@@ -1,0 +1,120 @@
+{
+  "timestamp": 1771050910.452171,
+  "performance_analysis": {
+    "win_rate": 0.0,
+    "total_trades": 0,
+    "total_profit": 0.0,
+    "avg_profit": 0.0,
+    "assessment": "数据不足，需要更多交易数据",
+    "issues": []
+  },
+  "tool_evaluation": {
+    "total_tools": 0,
+    "tool_list": [],
+    "coverage": {
+      "trend": {
+        "covered": 0,
+        "total": 4,
+        "percentage": 0.0
+      },
+      "momentum": {
+        "covered": 0,
+        "total": 4,
+        "percentage": 0.0
+      },
+      "volatility": {
+        "covered": 0,
+        "total": 3,
+        "percentage": 0.0
+      },
+      "volume": {
+        "covered": 0,
+        "total": 3,
+        "percentage": 0.0
+      },
+      "pattern": {
+        "covered": 0,
+        "total": 3,
+        "percentage": 0.0
+      }
+    },
+    "redundancy": [],
+    "missing_areas": [
+      "trend",
+      "momentum",
+      "volatility",
+      "volume",
+      "pattern"
+    ]
+  },
+  "gaps": [
+    {
+      "type": "capability",
+      "description": "缺少trend类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "缺少momentum类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "缺少volatility类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "缺少volume类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "缺少pattern类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "工具数量不足，需要更多分析维度",
+      "priority": "medium"
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "add_trend_tools",
+      "description": "添加趋势跟踪工具",
+      "tools_needed": [
+        "adx_analyzer",
+        "trend_detector"
+      ],
+      "priority": "medium"
+    },
+    {
+      "action": "add_momentum_tools",
+      "description": "添加动量指标工具",
+      "tools_needed": [
+        "stochastic_analyzer",
+        "cci_calculator"
+      ],
+      "priority": "medium"
+    },
+    {
+      "action": "add_volatility_tools",
+      "description": "添加波动率分析工具",
+      "tools_needed": [
+        "atr_calculator",
+        "bollinger_analyzer"
+      ],
+      "priority": "medium"
+    },
+    {
+      "action": "add_multi_timeframe",
+      "description": "添加多时间框架分析能力",
+      "tools_needed": [
+        "multi_timeframe_analyzer"
+      ],
+      "priority": "low"
+    }
+  ],
+  "summary": "胜率: 0.0% | 总交易: 0 | 高优先级缺口: 0个 | 建议改进: 4项"
+}

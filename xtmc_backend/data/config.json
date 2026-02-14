@@ -1,0 +1,14 @@
+{
+  "trade": {
+    "exchange": "okx",
+    "api_key": "",
+    "api_secret": "",
+    "okx_passphrase": "",
+    "proxy": "",
+    "symbol": "BTC-USDT",
+    "timeframe": "1h",
+    "enable_trading": false,
+    "max_position": 100.0,
+    "risk_percent": 2.0
+  }
+}

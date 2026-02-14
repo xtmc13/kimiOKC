@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": 1771050910.4537122,
+    "based_on_reflection": 1771050910.452171,
+    "planned_tools": [
+      "adx_analyzer",
+      "trend_detector",
+      "stochastic_analyzer",
+      "cci_calculator",
+      "atr_calculator",
+      "bollinger_analyzer",
+      "multi_timeframe_analyzer"
+    ],
+    "recommendations_count": 4
+  },
+  {
+    "timestamp": 1771055894.2735739,
+    "planned_tools": [],
+    "details": []
+  },
+  {
+    "timestamp": 1771055979.2416263,
+    "planned_tools": [],
+    "details": []
+  }
+]

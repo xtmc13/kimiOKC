@@ -1,0 +1,22 @@
+# XTMC量化交易系统 - Python依赖
+# 专为网心云OES Plus (4GB内存)优化
+
+# Web框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# 数据与计算
+numpy==1.26.3
+aiosqlite==0.19.0
+aiohttp==3.9.1
+
+# 系统监控
+psutil==5.9.8
+
+# 配置与验证
+pydantic==2.5.3
+
+# 本地LLM推理 (可选 - 需要C++编译器)
+# Windows(需VS Build Tools): pip install llama-cpp-python
+# ARM/Linux: CMAKE_ARGS="-DLLAMA_BLAS=ON" pip install llama-cpp-python
+# llama-cpp-python==0.3.16

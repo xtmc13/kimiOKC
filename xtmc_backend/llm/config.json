@@ -1,0 +1,10 @@
+{
+  "model_path": "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+  "n_ctx": 4096,
+  "n_gpu_layers": 0,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "max_tokens": 1024,
+  "idle_timeout_minutes": 30,
+  "chat_format": "chatml"
+}
