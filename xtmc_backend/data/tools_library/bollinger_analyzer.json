@@ -1,0 +1,7 @@
+{
+  "name": "bollinger_analyzer",
+  "code": "\nfrom typing import Dict, List, Any\n\nclass BollingerAnalyzer:\n    \"\"\"bollinger_analyzer 分析器\"\"\"\n    \n    def __init__(self):\n        pass\n    \n    def analyze(self, market_data: Dict, symbol: str) -> Dict:\n        \"\"\"分析并返回信号\"\"\"\n        # TODO: 实现分析逻辑\n        return {\n            'signal': 'HOLD',\n            'confidence': 0,\n            'reason': '待实现'\n        }\n",
+  "generated_at": 1771056491.631535,
+  "based_on_reflection": 1771056491.6186702,
+  "version": "1.0.0"
+}

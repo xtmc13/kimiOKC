@@ -1,0 +1,78 @@
+{
+  "timestamp": 1771056517.8355381,
+  "performance_analysis": {
+    "win_rate": 0.0,
+    "total_trades": 0,
+    "total_profit": 0.0,
+    "avg_profit": 0.0,
+    "assessment": "数据不足，需要更多交易数据",
+    "issues": []
+  },
+  "tool_evaluation": {
+    "total_tools": 7,
+    "tool_list": [
+      "adx_analyzer",
+      "atr_calculator",
+      "bollinger_analyzer",
+      "cci_calculator",
+      "multi_timeframe_analyzer",
+      "stochastic_analyzer",
+      "trend_detector"
+    ],
+    "coverage": {
+      "trend": {
+        "covered": 1,
+        "total": 4,
+        "percentage": 0.25
+      },
+      "momentum": {
+        "covered": 2,
+        "total": 4,
+        "percentage": 0.5
+      },
+      "volatility": {
+        "covered": 2,
+        "total": 3,
+        "percentage": 0.6666666666666666
+      },
+      "volume": {
+        "covered": 0,
+        "total": 3,
+        "percentage": 0.0
+      },
+      "pattern": {
+        "covered": 0,
+        "total": 3,
+        "percentage": 0.0
+      }
+    },
+    "redundancy": [],
+    "missing_areas": [
+      "volume",
+      "pattern"
+    ]
+  },
+  "gaps": [
+    {
+      "type": "capability",
+      "description": "缺少volume类型的分析工具",
+      "priority": "medium"
+    },
+    {
+      "type": "capability",
+      "description": "缺少pattern类型的分析工具",
+      "priority": "medium"
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "add_multi_timeframe",
+      "description": "添加多时间框架分析能力",
+      "tools_needed": [
+        "multi_timeframe_analyzer"
+      ],
+      "priority": "low"
+    }
+  ],
+  "summary": "胜率: 0.0% | 总交易: 0 | 高优先级缺口: 0个 | 建议改进: 1项"
+}

@@ -1,0 +1,70 @@
+[
+  {
+    "timestamp": 1771056491.621245,
+    "based_on_reflection": 1771056491.6186702,
+    "planned_tools": [
+      "adx_analyzer",
+      "trend_detector",
+      "stochastic_analyzer",
+      "cci_calculator",
+      "atr_calculator",
+      "bollinger_analyzer",
+      "multi_timeframe_analyzer"
+    ],
+    "recommendations_count": 4
+  },
+  {
+    "timestamp": 1771056517.839181,
+    "based_on_reflection": 1771056517.8355381,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771057295.7450233,
+    "based_on_reflection": 1771057295.7421832,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771057492.8449366,
+    "based_on_reflection": 1771057492.8418221,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771058206.7703114,
+    "based_on_reflection": 1771058206.7668378,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771059200.4029593,
+    "based_on_reflection": 1771059200.400353,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771059229.8768961,
+    "based_on_reflection": 1771059229.874227,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771059256.1447988,
+    "based_on_reflection": 1771059256.1416435,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771059289.6954641,
+    "based_on_reflection": 1771059289.6917078,
+    "planned_tools": [],
+    "recommendations_count": 1
+  },
+  {
+    "timestamp": 1771060311.55021,
+    "based_on_reflection": 1771060311.5476024,
+    "planned_tools": [],
+    "recommendations_count": 1
+  }
+]

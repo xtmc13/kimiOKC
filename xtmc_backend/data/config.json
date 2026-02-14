@@ -1,0 +1,12 @@
+{
+  "trade": {
+    "exchange": "binance",
+    "api_key": "",
+    "api_secret": "",
+    "symbol": "TAOUSDT",
+    "timeframe": "5m",
+    "enable_trading": false,
+    "max_position": 100.0,
+    "risk_percent": 2.0
+  }
+}
