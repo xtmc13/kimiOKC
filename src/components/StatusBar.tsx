@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Wifi, WifiOff, Server, Activity, Brain, Database, HardDrive, Cpu, MemoryStick } from 'lucide-react';
+import { Wifi, WifiOff, Server, Brain, Database, HardDrive, Cpu, MemoryStick } from 'lucide-react';
 import type { SystemStatus } from '../types';
 
 interface StatusBarProps {
