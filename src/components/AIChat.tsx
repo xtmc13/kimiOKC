@@ -1,6 +1,7 @@
 /**
  * XTMC AI智能体交互界面
  * 具备完整的系统控制、数据分析、策略执行能力
+ * 支持外部AI API (Kimi, DeepSeek等)
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -19,10 +20,13 @@ import {
   Cpu,
   Target,
   Layers,
-  RefreshCw
+  RefreshCw,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
 import type { ChatMessage, SystemStatus, TradeConfig, MarketData, TradeSignal } from '../types';
 import { aiAgent, type AIContext } from '../lib/aiAgent';
+import { getAIClient } from '../lib/aiApi';
 
 interface AIChatProps {
   messages: ChatMessage[];
@@ -40,6 +44,19 @@ interface AIChatProps {
   onChangeTimeframe?: (timeframe: string) => void;
   onToggleTrading?: (enabled: boolean) => void;
   onAddIndicator?: (indicatorId: string) => void;
+  // AI API配置
+  aiSettings?: {
+    kimiKey: string;
+    deepseekKey: string;
+    openaiKey: string;
+    claudeKey: string;
+    geminiKey: string;
+    qwenKey: string;
+    glmKey: string;
+    ollamaUrl: string;
+    ollamaModel: string;
+    aiProvider: string;
+  };
 }
 
 export default function AIChat({ 
@@ -56,15 +73,31 @@ export default function AIChat({
   onSwitchSymbol,
   onChangeTimeframe,
   onToggleTrading,
-  onAddIndicator
+  onAddIndicator,
+  aiSettings
 }: AIChatProps) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [thinkingTime, setThinkingTime] = useState(0);
+  const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [showTools, setShowTools] = useState(false);
+  const [aiProvider, setAiProvider] = useState<string>('local');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
+
+  // 检查外部AI是否可用
+  useEffect(() => {
+    if (aiSettings) {
+      const client = getAIClient(aiSettings);
+      if (client.isAvailable()) {
+        setAiProvider(client.getCurrentProvider());
+      } else {
+        setAiProvider('local');
+      }
+    }
+  }, [aiSettings]);
 
   // 合并消息 (包含服务器消息和本地AI消息)
   const allMessages = [...messages, ...localMessages];
@@ -114,18 +147,80 @@ export default function AIChat({
     setLocalMessages(prev => [...prev, userMessage]);
 
     setIsTyping(true);
+    setThinkingTime(0);
+    thinkingTimerRef.current = setInterval(() => {
+      setThinkingTime(prev => prev + 1);
+    }, 1000);
     
     try {
-      // 使用AI智能体处理
-      const response = await aiAgent.processInput(userInput);
+      // 检查是否是系统控制命令（如切换币种、开关交易等）
+      const intent = aiAgent.recognizeIntent(userInput);
+      const isSystemCommand = intent.suggestedTool && 
+        ['toggle_trading', 'switch_symbol', 'change_timeframe', 'add_indicator', 'update_risk_config'].includes(intent.suggestedTool) &&
+        intent.confidence > 0.8;
       
-      const aiMessage: ChatMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-        metadata: { processed: true }
-      };
-      setLocalMessages(prev => [...prev, aiMessage]);
+      // 系统控制命令使用本地处理
+      if (isSystemCommand) {
+        const response = await aiAgent.processInput(userInput);
+        const aiMessage: ChatMessage = {
+          role: 'assistant',
+          content: response,
+          timestamp: Date.now(),
+          metadata: { processed: true, provider: 'local' }
+        };
+        setLocalMessages(prev => [...prev, aiMessage]);
+      } 
+      // 其他请求优先使用外部AI（Ollama等）
+      else if (aiSettings) {
+        const client = getAIClient(aiSettings);
+        
+        if (client.isAvailable()) {
+          // 构建市场上下文
+          const context = buildMarketContext();
+          
+          try {
+            const response = await client.chat(userInput, context);
+            const aiMessage: ChatMessage = {
+              role: 'assistant',
+              content: response.content,
+              timestamp: Date.now(),
+              metadata: { processed: true, provider: client.getCurrentProvider(), model: response.model }
+            };
+            setLocalMessages(prev => [...prev, aiMessage]);
+          } catch (apiError) {
+            // 外部API失败，回退到本地处理
+            console.warn('外部AI API调用失败，使用本地处理:', apiError);
+            const response = await aiAgent.processInput(userInput);
+            const aiMessage: ChatMessage = {
+              role: 'assistant',
+              content: `${response}\n\n---\n⚠️ AI服务暂时不可用，使用本地处理`,
+              timestamp: Date.now(),
+              metadata: { processed: true, provider: 'local', fallback: true }
+            };
+            setLocalMessages(prev => [...prev, aiMessage]);
+          }
+        } else {
+          // 没有外部API配置，使用本地处理
+          const response = await aiAgent.processInput(userInput);
+          const aiMessage: ChatMessage = {
+            role: 'assistant',
+            content: response,
+            timestamp: Date.now(),
+            metadata: { processed: true, provider: 'local' }
+          };
+          setLocalMessages(prev => [...prev, aiMessage]);
+        }
+      } else {
+        // 没有AI设置，使用本地处理
+        const response = await aiAgent.processInput(userInput);
+        const aiMessage: ChatMessage = {
+          role: 'assistant',
+          content: response,
+          timestamp: Date.now(),
+          metadata: { processed: true, provider: 'local' }
+        };
+        setLocalMessages(prev => [...prev, aiMessage]);
+      }
     } catch (error) {
       const errorMessage: ChatMessage = {
         role: 'assistant',
@@ -135,8 +230,120 @@ export default function AIChat({
       setLocalMessages(prev => [...prev, errorMessage]);
     }
     
+    if (thinkingTimerRef.current) {
+      clearInterval(thinkingTimerRef.current);
+      thinkingTimerRef.current = null;
+    }
     setIsTyping(false);
   };
+
+  // 构建市场上下文 - 增强版
+  const buildMarketContext = useCallback(() => {
+    if (marketData.length < 20) return '';
+    
+    const data50 = marketData.slice(-50);
+    const data20 = marketData.slice(-20);
+    const closes = data50.map(d => d.close);
+    const highs = data50.map(d => d.high);
+    const lows = data50.map(d => d.low);
+    const volumes = data50.map(d => d.volume);
+    
+    // 价格统计
+    const high24h = Math.max(...data20.map(d => d.high));
+    const low24h = Math.min(...data20.map(d => d.low));
+    const priceChange = ((currentPrice - closes[closes.length - 20]) / closes[closes.length - 20] * 100);
+    
+    // 均线
+    const sma20 = data20.map(d => d.close).reduce((a, b) => a + b, 0) / 20;
+    const sma50 = closes.reduce((a, b) => a + b, 0) / closes.length;
+    
+    // EMA12 & EMA26
+    const calcEMA = (data: number[], period: number) => {
+      const k = 2 / (period + 1);
+      let ema = data[0];
+      for (let i = 1; i < data.length; i++) {
+        ema = data[i] * k + ema * (1 - k);
+      }
+      return ema;
+    };
+    const ema12 = calcEMA(closes, 12);
+    const ema26 = calcEMA(closes, 26);
+    const macdLine = ema12 - ema26;
+    
+    // RSI
+    let gains = 0, losses = 0;
+    for (let i = closes.length - 14; i < closes.length; i++) {
+      const change = closes[i] - closes[i - 1];
+      if (change > 0) gains += change;
+      else losses -= change;
+    }
+    const rsi = gains + losses > 0 ? (gains / (gains + losses) * 100) : 50;
+    
+    // 布林带
+    const std = Math.sqrt(data20.map(d => d.close).reduce((sum, c) => sum + Math.pow(c - sma20, 2), 0) / 20);
+    const bollUpper = sma20 + 2 * std;
+    const bollLower = sma20 - 2 * std;
+    
+    // ATR (平均真实波幅)
+    let atrSum = 0;
+    for (let i = data20.length - 14; i < data20.length; i++) {
+      const tr = Math.max(
+        data20[i].high - data20[i].low,
+        Math.abs(data20[i].high - data20[i - 1].close),
+        Math.abs(data20[i].low - data20[i - 1].close)
+      );
+      atrSum += tr;
+    }
+    const atr = atrSum / 14;
+    
+    // 成交量分析
+    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const latestVolume = volumes[volumes.length - 1];
+    const volumeRatio = latestVolume / avgVolume;
+    
+    // 趋势判断
+    const trend = currentPrice > sma20 && sma20 > sma50 ? '上升趋势' : 
+                  currentPrice < sma20 && sma20 < sma50 ? '下降趋势' : '震荡';
+    
+    // 支撑阻力
+    const recentHigh = Math.max(...highs.slice(-20));
+    const recentLow = Math.min(...lows.slice(-20));
+    
+    return `
+## 实时市场数据
+
+**交易对**: ${currentSymbol}
+**当前价格**: $${currentPrice.toFixed(2)}
+**涨跌幅(20周期)**: ${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%
+
+### 价格区间
+- 24h最高: $${high24h.toFixed(2)}
+- 24h最低: $${low24h.toFixed(2)}
+- 近期阻力: $${recentHigh.toFixed(2)} (距离 ${((recentHigh - currentPrice) / currentPrice * 100).toFixed(2)}%)
+- 近期支撑: $${recentLow.toFixed(2)} (距离 ${((currentPrice - recentLow) / currentPrice * 100).toFixed(2)}%)
+
+### 均线系统
+- SMA20: $${sma20.toFixed(2)} (价格${currentPrice > sma20 ? '在上方' : '在下方'})
+- SMA50: $${sma50.toFixed(2)}
+- EMA12: $${ema12.toFixed(2)}
+- EMA26: $${ema26.toFixed(2)}
+
+### 技术指标
+- **趋势**: ${trend}
+- **RSI(14)**: ${rsi.toFixed(1)} (${rsi > 70 ? '超买区间' : rsi < 30 ? '超卖区间' : '中性区间'})
+- **MACD**: ${macdLine > 0 ? '多头' : '空头'} (${macdLine.toFixed(2)})
+- **布林带**: 上轨$${bollUpper.toFixed(2)} / 中轨$${sma20.toFixed(2)} / 下轨$${bollLower.toFixed(2)}
+- **ATR(14)**: $${atr.toFixed(2)} (波动率${(atr / currentPrice * 100).toFixed(2)}%)
+
+### 成交量
+- 最新成交量: ${latestVolume.toFixed(0)}
+- 平均成交量: ${avgVolume.toFixed(0)}
+- 量比: ${volumeRatio.toFixed(2)}x (${volumeRatio > 1.5 ? '放量' : volumeRatio < 0.5 ? '缩量' : '正常'})
+
+### 最近信号
+${signals.length > 0 ? signals.slice(0, 3).map(s => `- ${s.action} @ $${s.price.toFixed(2)} (${s.reason})`).join('\n') : '- 暂无信号'}
+    `.trim();
+  }, [marketData, currentSymbol, currentPrice, signals]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,6 +384,10 @@ export default function AIChat({
       setLocalMessages(prev => [...prev, errorMessage]);
     }
     
+    if (thinkingTimerRef.current) {
+      clearInterval(thinkingTimerRef.current);
+      thinkingTimerRef.current = null;
+    }
     setIsTyping(false);
   };
 
@@ -228,14 +439,21 @@ export default function AIChat({
         <div className={`w-1.5 h-1.5 rounded-full ${systemStatus?.ai?.is_running ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
         {systemStatus?.ai?.is_running ? '在线' : '离线'}
       </div>
+      {/* AI提供商指示 */}
+      {aiProvider !== 'local' ? (
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+          <Cloud className="w-3 h-3" />
+          {aiProvider.toUpperCase()}
+        </div>
+      ) : (
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400">
+          <CloudOff className="w-3 h-3" />
+          本地
+        </div>
+      )}
       {systemStatus?.ai?.tool_count && (
         <span className="text-gray-400 dark:text-slate-500">
           {systemStatus.ai.tool_count} 工具
-        </span>
-      )}
-      {systemStatus?.ai?.win_rate !== undefined && systemStatus.ai.win_rate > 0 && (
-        <span className={`${systemStatus.ai.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}`}>
-          {systemStatus.ai.win_rate.toFixed(1)}% 胜率
         </span>
       )}
     </div>
@@ -362,8 +580,11 @@ export default function AIChat({
                 {msg.metadata?.processed && (
                   <span className="flex items-center gap-0.5 text-purple-500">
                     <Zap className="w-3 h-3" />
-                    智能体
+                    {msg.metadata.provider === 'local' ? '本地' : msg.metadata.provider?.toUpperCase()}
                   </span>
+                )}
+                {msg.metadata?.fallback && (
+                  <span className="text-yellow-500 text-[10px]">(回退)</span>
                 )}
               </div>
             </div>
@@ -377,7 +598,9 @@ export default function AIChat({
             </div>
             <div className="bg-gray-100 dark:bg-slate-700 px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-purple-500 animate-spin" />
-              <span className="text-sm text-gray-600 dark:text-slate-300">AI正在处理...</span>
+              <span className="text-sm text-gray-600 dark:text-slate-300">
+                AI已思考 {thinkingTime} 秒...
+              </span>
             </div>
           </div>
         )}

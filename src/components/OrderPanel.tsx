@@ -20,6 +20,7 @@ interface OrderPanelProps {
   symbol: string;
   currentPrice: number;
   balance?: number;
+  tradeType?: 'spot' | 'futures';
   onPlaceOrder?: (order: OrderParams) => void;
 }
 
@@ -46,6 +47,7 @@ export default function OrderPanel({
   symbol, 
   currentPrice, 
   balance = 10000,
+  tradeType = 'futures',
   onPlaceOrder 
 }: OrderPanelProps) {
   const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
@@ -159,7 +161,9 @@ export default function OrderPanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-700/50">
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-blue-400" />
-          <span className="font-medium text-gray-900 dark:text-white text-sm">现货/合约交易</span>
+          <span className="font-medium text-gray-900 dark:text-white text-sm">
+            {tradeType === 'spot' ? '现货交易' : '合约交易'}
+          </span>
         </div>
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
@@ -170,41 +174,44 @@ export default function OrderPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* 保证金模式和杠杆 */}
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700">
+        {/* 保证金模式和杠杆 - 仅合约显示 */}
+        {tradeType === 'futures' && (
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700">
+                <button
+                  onClick={() => setMarginMode('cross')}
+                  className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                    marginMode === 'cross' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
+                  }`}
+                >
+                  全仓
+                </button>
+                <button
+                  onClick={() => setMarginMode('isolated')}
+                  className={`flex-1 py-1.5 text-xs font-medium transition-all ${
+                    marginMode === 'isolated' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
+                  }`}
+                >
+                  逐仓
+                </button>
+              </div>
+            </div>
+            <div className="flex-1">
               <button
-                onClick={() => setMarginMode('cross')}
-                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-                  marginMode === 'cross' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
-                }`}
+                className="w-full py-1.5 text-xs font-medium bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white rounded-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center gap-1"
               >
-                全仓
-              </button>
-              <button
-                onClick={() => setMarginMode('isolated')}
-                className={`flex-1 py-1.5 text-xs font-medium transition-all ${
-                  marginMode === 'isolated' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
-                }`}
-              >
-                逐仓
+                <Zap className="w-3 h-3 text-yellow-500" />
+                {leverage}x 杠杆
+                <ChevronDown className="w-3 h-3" />
               </button>
             </div>
           </div>
-          <div className="flex-1">
-            <button
-              className="w-full py-1.5 text-xs font-medium bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white rounded-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center gap-1"
-            >
-              <Zap className="w-3 h-3 text-yellow-500" />
-              {leverage}x 杠杆
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
+        )}
 
-        {/* 杠杆快选 */}
-        <div className="flex gap-1">
+        {/* 杠杆快选 - 仅合约显示 */}
+        {tradeType === 'futures' && (
+          <div className="flex gap-1">
           {quickLeverages.map((lv) => (
             <button
               key={lv}
@@ -219,6 +226,7 @@ export default function OrderPanel({
             </button>
           ))}
         </div>
+        )}
 
         {/* 买卖切换 */}
         <div className="grid grid-cols-2 gap-2">

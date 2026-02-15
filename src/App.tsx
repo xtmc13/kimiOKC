@@ -36,8 +36,15 @@ import type {
   EvolutionRecord
 } from './types';
 
-// API基础URL
-const API_BASE = window.location.origin;
+// 导入API
+import { 
+  fetchKlines, 
+  fetchFuturesKlines,
+  fetchSpotBalance, 
+  fetchFuturesBalance,
+  subscribeKlines,
+  type AccountBalance
+} from './lib/binanceApi';
 
 // 默认设置配置
 const DEFAULT_SETTINGS = {
@@ -46,7 +53,7 @@ const DEFAULT_SETTINGS = {
   apiSecret: '',
   passphrase: '',
   testnet: false,
-  ollamaUrl: 'http://localhost:11434',
+  ollamaUrl: '/api/ollama',  // 使用服务器代理路径
   ollamaModel: 'qwen2.5:7b',
   deepseekKey: '',
   glmKey: '',
@@ -55,7 +62,7 @@ const DEFAULT_SETTINGS = {
   geminiKey: '',
   kimiKey: '',
   qwenKey: '',
-  aiProvider: 'auto' as const,
+  aiProvider: 'ollama' as const,  // 默认使用服务器上的Ollama
   // AI进化配置
   aiEvolutionEnabled: true,
   aiEvolutionInterval: 6,
@@ -139,12 +146,27 @@ function App() {
   const [signals, setSignals] = useState<TradeSignal[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [aiTools, setAiTools] = useState<AITool[]>([]);
-  const [evolutionRecords, setEvolutionRecords] = useState<EvolutionRecord[]>([]);
+  const [evolutionRecords, _setEvolutionRecords] = useState<EvolutionRecord[]>([]);
+  
+  // 交易类型：现货 或 合约
+  const [tradeType, setTradeType] = useState<'spot' | 'futures'>(() => {
+    const saved = localStorage.getItem('xtmc_trade_type');
+    return (saved as 'spot' | 'futures') || 'futures';
+  });
+  
+  // 账户余额
+  const [accountBalance, setAccountBalance] = useState<AccountBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  
+  // 数据加载状态
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   
   const [mainTab, setMainTab] = useState<'chart' | 'signals' | 'tools' | 'evolution' | 'backtest'>('chart');
   const [rightTab, setRightTab] = useState<'trade' | 'grid' | 'dca' | 'multi' | 'auto' | 'balance' | 'chat'>('trade');
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsUnsubscribeRef = useRef<(() => void) | null>(null);
   const timeframeRef = useRef(tradeConfig.timeframe);
 
   // 设置相关状态
@@ -202,227 +224,222 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handler);
   }, [settings.theme]);
 
-  // ============== WebSocket连接 ==============
+  // ============== 币安数据获取 ==============
   
+  // 保存交易类型
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    localStorage.setItem('xtmc_trade_type', tradeType);
+  }, [tradeType]);
 
-    const connect = () => {
+  // 获取K线数据
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadKlines = async () => {
+      setDataLoading(true);
+      setDataError(null);
+      
       try {
-        const wsUrl = API_BASE.replace(/^http/, 'ws') + '/ws';
-        ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
+        const fetchFn = tradeType === 'futures' ? fetchFuturesKlines : fetchKlines;
+        const data = await fetchFn(currentSymbol, tradeConfig.timeframe, 500);
+        
+        if (isMounted) {
+          setMarketData(data);
           setIsConnected(true);
-          heartbeatTimer = setInterval(() => {
-            if (ws?.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ action: 'ping' }));
-            }
-          }, 30000);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            if (message.type === 'market_data' && message.data && Array.isArray(message.data)) {
-              setMarketData(message.data);
-            } else if (message.type === 'ai_signal' && message.signal) {
-              setSignals(prev => [message.signal, ...prev].slice(0, 100));
-            }
-          } catch {
-            // ignore
-          }
-        };
-
-        ws.onclose = () => {
+          setDataError(null);
+          
+          // 更新系统状态
+          setSystemStatus(prev => ({
+            ...prev,
+            status: 'running',
+            data_source: { 
+              active: 'binance', 
+              stats: { 
+                binance: { failures: 0, last_success: Date.now(), healthy: true } 
+              } 
+            },
+            trading: { ...prev.trading, symbol: currentSymbol }
+          }));
+        }
+      } catch (error) {
+        if (isMounted) {
+          setDataError(error instanceof Error ? error.message : '获取数据失败');
           setIsConnected(false);
-          if (heartbeatTimer) clearInterval(heartbeatTimer);
-          reconnectTimer = setTimeout(connect, 5000);
-        };
-
-        ws.onerror = () => setIsConnected(false);
-      } catch {
-        reconnectTimer = setTimeout(connect, 5000);
+        }
+      } finally {
+        if (isMounted) {
+          setDataLoading(false);
+        }
       }
     };
-
-    connect();
-
+    
+    loadKlines();
+    
+    // 定时刷新数据
+    const interval = setInterval(loadKlines, 60000);
+    
     return () => {
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentSymbol, tradeConfig.timeframe, tradeType]);
+
+  // WebSocket实时更新
+  useEffect(() => {
+    // 清理旧的WebSocket
+    if (wsUnsubscribeRef.current) {
+      wsUnsubscribeRef.current();
+      wsUnsubscribeRef.current = null;
+    }
+    
+    // 订阅实时K线
+    const unsubscribe = subscribeKlines(
+      currentSymbol,
+      tradeConfig.timeframe,
+      (newKline) => {
+        setMarketData(prev => {
+          if (prev.length === 0) return prev;
+          
+          const lastKline = prev[prev.length - 1];
+          // 如果是同一根K线，更新它
+          if (lastKline.time === newKline.time) {
+            return [...prev.slice(0, -1), newKline];
+          }
+          // 如果是新K线，添加它
+          if (newKline.time > lastKline.time) {
+            return [...prev.slice(1), newKline];
+          }
+          return prev;
+        });
+      },
+      tradeType === 'futures'
+    );
+    
+    wsUnsubscribeRef.current = unsubscribe;
+    
+    return () => {
+      if (wsUnsubscribeRef.current) {
+        wsUnsubscribeRef.current();
       }
     };
+  }, [currentSymbol, tradeConfig.timeframe, tradeType]);
+
+  // 获取账户余额
+  useEffect(() => {
+    if (!settings.apiKey || !settings.apiSecret) {
+      setAccountBalance(null);
+      return;
+    }
+    
+    let isMounted = true;
+    
+    const loadBalance = async () => {
+      setBalanceLoading(true);
+      setBalanceError(null);
+      
+      try {
+        const fetchFn = tradeType === 'futures' ? fetchFuturesBalance : fetchSpotBalance;
+        const balance = await fetchFn(settings.apiKey, settings.apiSecret);
+        
+        if (isMounted) {
+          setAccountBalance(balance);
+          setBalanceError(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setBalanceError(error instanceof Error ? error.message : '获取余额失败');
+          setAccountBalance(null);
+        }
+      } finally {
+        if (isMounted) {
+          setBalanceLoading(false);
+        }
+      }
+    };
+    
+    loadBalance();
+    
+    // 定时刷新余额
+    const interval = setInterval(loadBalance, 30000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [settings.apiKey, settings.apiSecret, tradeType]);
+
+  // ============== 其他数据获取 ==============
+
+  // 信号历史 (本地存储)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('xtmc_signals');
+      if (saved) {
+        setSignals(JSON.parse(saved).slice(0, 50));
+      }
+    } catch { /* ignore */ }
   }, []);
 
-  // ============== 数据获取 ==============
-
+  // 保存信号到本地
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/status`);
-        if (response.ok) {
-          const data = await response.json();
-          setSystemStatus(data);
-        }
-      } catch { /* ignore */ }
-    };
+    if (signals.length > 0) {
+      localStorage.setItem('xtmc_signals', JSON.stringify(signals.slice(0, 50)));
+    }
+  }, [signals]);
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
+  // AI工具列表 (本地)
   useEffect(() => {
-    const fetchConfigs = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/config/trade`);
-        if (response.ok) {
-          const data = await response.json();
-          setTradeConfig(prev => ({ ...prev, ...data }));
-          if (data.symbol) setCurrentSymbol(data.symbol);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchConfigs();
-  }, []);
-
-  useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/market/data?symbol=${currentSymbol}&timeframe=${timeframeRef.current}&limit=500`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data && Array.isArray(data.data)) {
-            setMarketData(data.data);
-          }
-        }
-      } catch { /* ignore */ }
-    };
-    fetchMarketData();
-  }, [currentSymbol, tradeConfig.timeframe]);
-
-  useEffect(() => {
-    const fetchSignals = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/signals?limit=50`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.signals) setSignals(data.signals);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchSignals();
-  }, []);
-
-  useEffect(() => {
-    const fetchChatHistory = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/chat/history?limit=50`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.messages) setChatMessages(data.messages);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchChatHistory();
-  }, []);
-
-  useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/ai/tools`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.tool_list) {
-            setAiTools(data.tool_list.map((name: string) => ({ name, description: '' })));
-          }
-        }
-      } catch { /* ignore */ }
-    };
-    fetchTools();
+    setAiTools([
+      { name: 'analyze_market', description: '分析市场' },
+      { name: 'generate_signal', description: '生成信号' },
+      { name: 'suggest_strategy', description: '策略建议' },
+      { name: 'get_system_status', description: '系统状态' },
+      { name: 'toggle_trading', description: '开关交易' },
+    ]);
   }, []);
 
   useEffect(() => {
-    const fetchReflections = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/ai/reflections?limit=10`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.reflections) {
-            setEvolutionRecords(data.reflections.map((r: any) => ({
-              timestamp: r.timestamp,
-              summary: r.summary,
-              gaps: r.gaps?.length || 0,
-              recommendations: r.recommendations?.length || 0
-            })));
-          }
-        }
-      } catch { /* ignore */ }
-    };
-    fetchReflections();
+    // 聊天历史从本地加载
+    try {
+      const saved = localStorage.getItem('xtmc_chat_history');
+      if (saved) {
+        setChatMessages(JSON.parse(saved).slice(-50));
+      }
+    } catch { /* ignore */ }
   }, []);
+
+  // 保存聊天历史
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      localStorage.setItem('xtmc_chat_history', JSON.stringify(chatMessages.slice(-50)));
+    }
+  }, [chatMessages]);
 
   // ============== 操作处理 ==============
 
-  const handleUpdateTradeConfig = useCallback(async (config: TradeConfig) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/config/trade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (response.ok) {
-        setTradeConfig(config);
-        if (config.symbol !== currentSymbol) {
-          setCurrentSymbol(config.symbol);
-        }
-      }
-    } catch (error) {
-      console.error('更新交易配置失败:', error);
+  const handleUpdateTradeConfig = useCallback((config: TradeConfig) => {
+    setTradeConfig(config);
+    if (config.symbol !== currentSymbol) {
+      setCurrentSymbol(config.symbol);
     }
+    // 保存到本地
+    localStorage.setItem('xtmc_trade_config', JSON.stringify(config));
   }, [currentSymbol]);
 
-  const handleSendMessage = useCallback(async (content: string) => {
+  const handleSendMessage = useCallback((content: string) => {
     const userMessage: ChatMessage = { role: 'user', content, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMessage]);
-
-    try {
-      const response = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userMessage),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const aiMessage: ChatMessage = {
-          role: 'assistant',
-          content: data.content || '抱歉，暂时无法回复。',
-          timestamp: Date.now(),
-          metadata: data.metadata,
-        };
-        setChatMessages(prev => [...prev, aiMessage]);
-      }
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '网络错误，请稍后重试。',
-        timestamp: Date.now(),
-      }]);
-    }
+    // AI响应由AIChat组件内部处理
   }, []);
 
   const handleSaveSettings = useCallback((newSettings: typeof settings) => {
     setSettings(newSettings);
+  }, []);
+
+  // 切换交易类型
+  const handleTradeTypeChange = useCallback((type: 'spot' | 'futures') => {
+    setTradeType(type);
+    setMarketData([]); // 清空数据，触发重新加载
   }, []);
 
   // ============== 主题类名 ==============
@@ -474,17 +491,47 @@ function App() {
             </div>
           </div>
 
-          {/* 数据源指示 */}
-          <div className="flex items-center gap-4 text-xs">
+          {/* 数据源指示 & 交易类型切换 */}
+          <div className="flex items-center gap-3 text-xs">
+            {/* 交易类型切换 */}
+            <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-slate-600">
+              <button
+                onClick={() => handleTradeTypeChange('spot')}
+                className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                  tradeType === 'spot'
+                    ? 'bg-green-600 text-white'
+                    : theme === 'light'
+                      ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                现货
+              </button>
+              <button
+                onClick={() => handleTradeTypeChange('futures')}
+                className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                  tradeType === 'futures'
+                    ? 'bg-orange-600 text-white'
+                    : theme === 'light'
+                      ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                合约
+              </button>
+            </div>
+            
+            {/* 数据源状态 */}
             <span className={`px-2 py-1 rounded ${
-              systemStatus.data_source?.active && systemStatus.data_source.active !== 'none' && systemStatus.data_source.active !== 'demo'
+              isConnected && !dataError
                 ? 'bg-green-600/20 text-green-400'
-                : 'bg-yellow-600/20 text-yellow-400'
+                : dataLoading
+                  ? 'bg-blue-600/20 text-blue-400'
+                  : 'bg-red-600/20 text-red-400'
             }`}>
-              {systemStatus.data_source?.active === 'demo' ? '模拟数据' : 
-               systemStatus.data_source?.active && systemStatus.data_source.active !== 'none' 
-                 ? `实时: ${systemStatus.data_source.active}` 
-                 : '连接中...'}
+              {dataLoading ? '加载中...' : 
+               dataError ? `错误: ${dataError}` :
+               isConnected ? `Binance ${tradeType === 'futures' ? '合约' : '现货'}` : '未连接'}
             </span>
           </div>
         </div>
@@ -597,15 +644,23 @@ function App() {
                   }`}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className={`text-[10px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>账户资产</div>
+                        <div className={`text-[10px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
+                          账户资产 {tradeType === 'futures' ? '(合约)' : '(现货)'}
+                        </div>
                         <div className={`text-lg font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
-                          {isApiConfigured ? '$27,261.03' : '--'}
+                          {balanceLoading ? '...' : 
+                           balanceError ? '--' :
+                           accountBalance ? `$${accountBalance.totalBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 
+                           isApiConfigured ? '获取中...' : '--'}
                         </div>
                       </div>
                       <div className="text-right">
                         <div className={`text-[10px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>可用余额</div>
                         <div className={`text-sm font-semibold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
-                          {isApiConfigured ? '$10,000.00' : '--'}
+                          {balanceLoading ? '...' :
+                           balanceError ? '--' :
+                           accountBalance ? `$${accountBalance.availableBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` :
+                           isApiConfigured ? '获取中...' : '--'}
                         </div>
                       </div>
                       {!isApiConfigured && (
@@ -616,12 +671,22 @@ function App() {
                           配置API
                         </button>
                       )}
+                      {balanceError && (
+                        <div className="text-[10px] text-red-400" title={balanceError}>
+                          API错误
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {rightTab === 'trade' && (
-                  <OrderPanel symbol={currentSymbol} currentPrice={currentPrice} />
+                  <OrderPanel 
+                    symbol={currentSymbol} 
+                    currentPrice={currentPrice}
+                    balance={accountBalance?.availableBalance || 0}
+                    tradeType={tradeType}
+                  />
                 )}
                 {rightTab === 'grid' && (
                   <GridTradingPanel symbol={currentSymbol} currentPrice={currentPrice} />
@@ -657,6 +722,18 @@ function App() {
                       onAddIndicator={(indicatorId) => {
                         // 触发图表添加指标 - 通过事件或状态传递
                         console.log('添加指标:', indicatorId);
+                      }}
+                      aiSettings={{
+                        kimiKey: settings.kimiKey || '',
+                        deepseekKey: settings.deepseekKey || '',
+                        openaiKey: settings.openaiKey || '',
+                        claudeKey: settings.claudeKey || '',
+                        geminiKey: settings.geminiKey || '',
+                        qwenKey: settings.qwenKey || '',
+                        glmKey: settings.glmKey || '',
+                        ollamaUrl: settings.ollamaUrl || '/api/ollama',
+                        ollamaModel: settings.ollamaModel || 'qwen2.5:7b',
+                        aiProvider: settings.aiProvider || 'ollama',
                       }}
                     />
                   </div>
